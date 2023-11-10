@@ -3,8 +3,8 @@ import ast
 from collections import defaultdict
 from pathlib import Path
 from typing import DefaultDict, Generator, Set, Union
-
-from snakefood3.graph import graph
+import os
+#from snakefood3.graph import graph
 
 
 class GenerateDependency:
@@ -126,8 +126,7 @@ class GenerateDependency:
         """Gets the import mapping for each module in the project"""
         imports = defaultdict(set)
         internal_packages = self.get_internal_packages()
-
-        for file in self.iter_py_files(self._root_path / self._package_name):
+        for file in self.iter_py_files(self._root_path):
             file_imports = self._get_all_imports_of_file(file)
             current_module = self.filename_to_module(file, self._root_path)
             imports[
@@ -143,6 +142,23 @@ class GenerateDependency:
                     if [c for c in str(internal_packages) if _import.startswith(str(c))]
                 }
             )
+        # file=self._root_path / self._package_name
+
+        # file_imports = self._get_all_imports_of_file(file)
+        # current_module = self.filename_to_module(file, self._root_path)
+        # imports[
+        #     self.get_first_prefix_matching_string(
+        #         current_module, *self._group_packages
+        #     )
+        # ].update(
+        #     {
+        #         self.get_first_prefix_matching_string(
+        #             _import, *self._group_packages
+        #         )
+        #         for _import in file_imports
+        #         if [c for c in str(internal_packages) if _import.startswith(str(c))]
+        #     }
+        # )
         formatted_imports = defaultdict(set)
         for source, dist in imports.items():
             if dist:
@@ -151,9 +167,53 @@ class GenerateDependency:
                         formatted_imports[source].add(d)
         return formatted_imports
 
-    def make_dot_file(self) -> str:
-        """Use existing template to generate a graph in dot language"""
-        return graph(self.get_import_map())
+    #def make_dot_file(self) -> str:
+     #   """Use existing template to generate a graph in dot language"""
+      #  return graph(self.get_import_map())
+    def get_pairs(self):
+        pairs=self.get_import_map()
+        edges = []
+        for key, value in pairs.items():
+            if value:
+                for v in value:
+                    edges.append({"source": v, "dist": str(self.module_to_filename(key, self._root_path))})
+        # d=self.filename_to_module(self._package_name, self._root_path)
+        dist_list = [self._package_name]
+        # for edge in edges:
+        #     if edge["dist"] in dist_list and edge["source"] not in dist_list:
+        #         dist_list.append(edge["source"])
+        # print(self.module_to_filename('autogen.oai', self._root_path))
+        # print(os.path.exists(self.module_to_filename('autogen.oai'+".__init__", self._root_path)))
+        final=[]
+        Flag=True
+        while Flag:
+            Flag=False
+            for edge in edges:
+                if edge["dist"] in dist_list and (os.path.exists(self.module_to_filename(edge["source"], self._root_path)) or os.path.exists(self.module_to_filename(edge["source"]+".__init__", self._root_path))):
+
+                    if os.path.exists(self.module_to_filename(edge["source"]+".__init__", self._root_path)):
+                        for root, dirs, files in os.walk(os.path.dirname(self.module_to_filename(edge["source"]+".__init__", self._root_path))):
+                            for file in files:
+                                if file.endswith('.py'):
+                                    if os.path.join(root, file) not in dist_list:
+                                        Flag=True
+                                        final.append({"source": os.path.join(root, file), "dist": edge["dist"]})
+                                        dist_list.append(os.path.join(root, file))
+
+                    # try:
+                    #     pkg_resources.get_distribution(edge["source"])
+                    # except pkg_resources.DistributionNotFound:
+                    #     if edge["source"] not in sys.builtin_module_names:
+                    #         final.append({"source": self.module_to_filename(edge["source"], self._root_path), "dist": self.module_to_filename(edge["dist"], self._root_path)})
+                    else:
+                        if str(self.module_to_filename(edge["source"], self._root_path)) not in dist_list:
+                            Flag=True
+                            final.append({"source": self.module_to_filename(edge["source"], self._root_path), "dist": edge["dist"]})
+                            dist_list.append(str(self.module_to_filename(edge["source"], self._root_path)))
+
+        # print(dist_list)
+        # return final,list(reversed(dist_list))
+        return list(reversed(dist_list))
 
 
 def main() -> None:
@@ -172,4 +232,7 @@ def main() -> None:
         )
     else:
         generate_dependency = GenerateDependency(args.project_path, args.package_name)
-    print(generate_dependency.make_dot_file())
+    print(generate_dependency.get_pairs())
+
+if __name__ == "__main__":
+    main()
